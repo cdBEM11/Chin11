@@ -1,0 +1,114 @@
+load jumping_b1_t3.mat
+Lp = length(data)+1; FsP = 2000 ;
+%% Window Parameters Setting
+ecg0 = data; %((Lp/2-30*FsP):(Lp/2+30*FsP));
+Cof = 12;  WinStep = Cof*FsP ;  % process every 12 sec of ECG
+olapStep = WinStep ; % slide window 2 sec by 2 sec.
+Lmax = length(ecg0); Endd = floor(Lmax/WinStep)*WinStep;
+cc=0 ; prevHR = 0 ;
+ecgSTD = std(ecg0);
+ecgMean = mean(ecg0);
+for kk= 1:olapStep:Endd-WinStep+1
+    intVal = kk:kk+WinStep-1 ; cc=cc+1; intLap = kk:kk+olapStep-1 ;
+    fprintf('Processing... segment [%g : %g]  (sec) \n', round(intVal(1))/FsP,round(intVal(end))/FsP);
+    ecgSeg = ecg0(intVal);
+    % Preprocess the ECG
+    % lowpass Butterworth filter
+    cut = [1, 10];
+  b1 = bandpass(ecgSeg,cut,FsP);
+    cutf = [0.1,50]/(FsP);               % normalized cutoff frequency
+    [b,a] = butter(2, cutf, 'bandpass');  % 10th order filter
+    ecg = filtfilt(b, a, ecgSeg);
+    
+    ecgT(intVal) = ecg ;
+    % Instantanous HR from ECG
+    [hr_spl{cc},hr_pp,peak,RR] = EKGpeakDethr(ecg,FsP,prevHR);
+    heartrateT(intVal) = hr_spl{cc} ; 
+    prevHR = hr_spl{cc}(olapStep);
+    
+    for ii = cc
+    for jj = 1:length(RR)
+    RRDif(ii,jj) = RR(jj);
+    end
+    end
+    
+    for xx = cc
+    for yy = 1 :length(peak)
+    peakP(xx,yy) = peak(yy); 
+    end
+    end
+    
+    totLghr_pp = length(hr_pp)+1;
+    for i = cc
+    for j = 1:length(hr_pp)
+    hrPeaks(i,j) = hr_pp(j);
+   
+    end
+    end
+
+    
+    
+    % Check peak detection
+     figure(1000+cc);clf; plot(ecg); hold on; plot(peak,ecg(peak),'*r');
+end
+heartrateTMean = mean(heartrateT);
+heartrateTSTD = std(heartrateT);
+heartrateT2Lim= heartrateTMean + heartrateTSTD; % Setting the upper limit
+heartrateT1Lim= heartrateTMean - heartrateTSTD; % Setting the lower limit
+
+%% Finding the Standardiviation and Mean Values
+c = hrPeaks;
+hrRateResize = heartrateT;
+g = size(c);
+for u = 1:g(1)
+for y = 1:g(2)
+  m = c(u,:);
+%   if c(u,:) == 0
+%   index2 = m==0;
+%   m(index2) = [];
+%   xyz = std(m);
+%   end
+  mSTD(u,:)= std(m);
+end
+end
+%% Trying to remove elements that contain the zeros.
+% First purposue to remove the noise raw by raw. 
+% but seem not possible, instead the whole matrix is converted with one
+% raw.
+
+% for u = 1:16
+% for y = 1:14
+%  if index3(u,y) == 1 
+%     c(u, y) = [];
+%  m =c;
+%  end
+% end
+% end
+% Elements the all the zeros but gives the answer in one row
+indx1 = c == 0;
+xy = c(indx1);
+c(indx1) = [];
+HrRateWindMean = mean(c);
+HrRateWindSTD = std(c);
+HrRateWinLLim =HrRateWindMean - HrRateWindSTD;
+HrRateWinULim =HrRateWindMean + HrRateWindSTD;
+%% Readjustsing the Heart rate and plotting again
+
+ hrReszInd = hrRateResize > HrRateWinULim;
+ hrReszInd2 = hrRateResize<HrRateWinLLim;
+ 
+
+
+
+if hrRateResize > HrRateWinULim && hrRhrRateResize<HrRateWinLLim
+    hrReszInd = find(hrRateResize > HrRateWinULim & hrRhrRateResize<HrRateWinLLim, :);
+end
+
+
+
+%% Plot Heart Rate
+tt = (1:intVal(end))/FsP/60;
+figure(1); clf;ax1(1)= subplot(211); plot(tt,ecgT); legend('ECG');xlabel('Time (min)','FontSize',14);
+ax1(2)= subplot(212); plot(tt,heartrateT,'r','linewidth',2); legend('HR');
+xlabel('Time (min)','FontSize',14); ylabel('HR (bpm)')
+linkaxes(ax1,'x');
